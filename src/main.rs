@@ -1,5 +1,6 @@
 use sha3::{Shake128, digest::{Update, ExtendableOutput, XofReader}};
-use qrcode_generator::{QrCodeEcc};
+use qrcode::{QrCode, EcLevel};
+use image::Luma;
 
 const HASH_SIZE: usize = 16;
 
@@ -12,6 +13,16 @@ fn gen_hash(data: &[u8]) -> Hash {
     let mut res1 = Hash::default(); // Since SHAKE is of variable d, we have to specify the output size.
     reader.read(&mut res1);
     return res1;
+}
+
+fn qr_as_image(data: &[u8]) {
+    // Write qr code
+    let code = QrCode::with_error_correction_level(data, EcLevel::M).unwrap();
+        
+    let image = code.render::<Luma<u8>>().build();
+
+    // Save the image.
+    image.save("tests/data/qrcode.png").unwrap();
 }
 
 fn gen_qr(contents: Vec<&str>, page: u8) {
@@ -28,8 +39,7 @@ fn gen_qr(contents: Vec<&str>, page: u8) {
     data.push(page);
 
     // Write qr code
-    qrcode_generator::to_png_to_file(data, QrCodeEcc::Medium, 1024, "tests/data/file_output.png").unwrap();
-
+    qr_as_image(&data);
 }
 
 fn main() {
