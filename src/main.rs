@@ -12,7 +12,15 @@ use sha3::{
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// The reference file
-    file: PathBuf,
+    file: Vec<PathBuf>,
+
+    /// Page count
+    #[arg(short,long)]
+    page_count: u8,
+
+    /// Exam ID
+    #[arg(short,long)]
+    exam_id: u8,
 }
 
 /// Exam medatada
@@ -114,7 +122,7 @@ fn qr_as_image(data: &[u8], filename: &str) -> StrResult<()> {
 
     // Save the image.
     image
-        .save("tests/data/".to_owned() + filename + ".png")
+        .save("generator/tests/data/".to_owned() + filename + ".png")
         .map_err(|e| e.to_string())
 }
 
@@ -134,14 +142,14 @@ fn gen_qr(contents: Vec<&[u8]>, meta: Meta, name: &str) {
 */
 
 /// Generate a series of QR codes
-fn mul_qr(contents: Vec<&[u8]>, meta: Meta, name: &str) -> StrResult<()> {
+fn mul_qr(contents: Vec<Vec<u8>>, meta: Meta, name: &str) -> StrResult<()> {
     // Generate hash
-    let hash: [u8; 16] = gen_hash(&collapse_contents(contents));
+    let hash = gen_hash(&collapse_contents(contents));
+    println!("{:?}", hash);
     for i in meta {
         // Create the full data (here, hash + page number)
         let mut data = hash.to_vec();
         data.extend(Vec::from(i));
-        //println!("{:?}", data);
         // Write qr code
         qr_as_image(&data, &(name.to_owned() + &i.to_string()))?;
     }
@@ -149,14 +157,14 @@ fn mul_qr(contents: Vec<&[u8]>, meta: Meta, name: &str) -> StrResult<()> {
 }
 
 /// Creates a unique hashable data buffer from multiple data buffers
-fn collapse_contents(contents: Vec<&[u8]>) -> Vec<u8> {
+fn collapse_contents(contents: Vec<Vec<u8>>) -> Vec<u8> {
     let len = contents.len().to_be_bytes();
     let mut data = contents
         .into_iter()
         .flat_map(|v| {
             // Add opening and closing terminators, ensuring that with contents = [file1,file2] and [file,1file2], the hashes are unique
             let mut a = b"<".to_vec();
-            a.extend_from_slice(v);
+            a.extend(v);
             a.extend_from_slice(b">");
             a
         })
@@ -168,10 +176,20 @@ fn collapse_contents(contents: Vec<&[u8]>) -> Vec<u8> {
 
 fn main() -> StrResult<()> {
     let cmd = Cli::parse();
+    let files = cmd
+        .file.iter()
+        .map(|p| std::fs::read(p));
+    // We check that NONE of those failed
+    if let Some(e) = files.clone()
+        .find_map(|p| p.err())
+    {
+        println!("{:?}", cmd.file);
+        return Err(e.to_string());
+    }
 
     mul_qr(
-        vec![&std::fs::read(cmd.file).map_err(|e| e.to_string())?],
-        Meta::new(2, 0).ok_or("Page count cannot be O!")?,
+        files.map(|c| c.unwrap()).collect(),
+        Meta::new(cmd.page_count, cmd.exam_id).ok_or("Page count cannot be O!")?,
         "qrcode-",
     )
 }
